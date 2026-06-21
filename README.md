@@ -1,6 +1,6 @@
 # sparkinfer-moe
 
-MoE (Mixture-of-Experts) engine for **NVIDIA RTX Spark**, RTX 5090, and Jetson Thor.
+MoE (Mixture-of-Experts) engine for **NVIDIA RTX Spark**, RTX PRO 6000, RTX 5090, and Jetson Thor.
 
 Part of [gittensor-ai-lab](https://github.com/orgs/gittensor-ai-lab) — SN74.
 
