@@ -172,7 +172,10 @@ def main():
                  "pip install -q --break-system-packages huggingface_hub tokenizers >/dev/null 2>&1 || true; "
                  f"if [ -d /root/sparkinfer/.git ]; then cd /root/sparkinfer && git fetch -q origin && git checkout -q {args.ref} && git pull -q origin {args.ref}; "
                  f"else git clone -q {REPO} /root/sparkinfer && cd /root/sparkinfer && git checkout -q {args.ref}; fi")
-        if sh(host, port, setup, timeout=1800).returncode: print(">> setup warnings (continuing)")
+        sr = sh(host, port, setup, timeout=1800)
+        if sr.returncode:
+            print(f">> setup rc={sr.returncode} — stdout/stderr tail (continuing):")
+            sys.stdout.write((sr.stdout or "")[-1500:]); sys.stdout.write((sr.stderr or "")[-1500:])
         # Trust: grade with the harness from the protected default branch, not the submission's copy.
         # The build still measures the PR's kernels/runtime/moe; only bench/scripts (the scoring code,
         # incl. label.py + accuracy*) is pinned to origin/main. Fail-closed (&&): no trusted harness -> no eval.
