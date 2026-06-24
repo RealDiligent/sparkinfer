@@ -104,6 +104,17 @@
   ],
   "prs": [
     {
+      "num": 9,
+      "title": "fix(runtime/gguf): reject malformed metadata arrays instead of desyncing the parse cursor",
+      "areas": [
+        "runtime"
+      ],
+      "label": "none",
+      "tps": 184.67,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/9"
+    },
+    {
       "num": 11,
       "title": "runtime/gguf: bound tensor n_dims to GGML_MAX_DIMS before writing dims[]",
       "areas": [
