@@ -28,17 +28,21 @@ ensure_model() {
   [ -f "$MODELS_DIR/$MODEL_FILE" ] && return
   echo ">> downloading $MODEL_REPO/$MODEL_FILE -> $MODELS_DIR (~17 GB) ..." >&2
   mkdir -p "$MODELS_DIR"
-  # HF Xet can stall on some boxes; plain HTTPS is reliable. aria2c (if present) is faster.
-  HF_HUB_DISABLE_XET=1 hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir "$MODELS_DIR" >&2 \
-    || python3 -c "from huggingface_hub import hf_hub_download as d; d('$MODEL_REPO','$MODEL_FILE',local_dir='$MODELS_DIR')" >&2
+  # Try three download methods in order; fall back to plain curl (no HF tools needed).
+  HF_HUB_DISABLE_XET=1 hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir "$MODELS_DIR" >&2 || \
+  python3 -c "from huggingface_hub import hf_hub_download as d; d('$MODEL_REPO','$MODEL_FILE',local_dir='$MODELS_DIR')" >&2 || \
+  curl -fL --progress-bar "https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILE}" \
+       -o "$MODELS_DIR/$MODEL_FILE" >&2
 }
 
 ensure_tokenizer() {
   [ -f "$MODELS_DIR/tokenizer.json" ] && return
   echo ">> downloading tokenizer.json ..." >&2
   mkdir -p "$MODELS_DIR"
-  HF_HUB_DISABLE_XET=1 hf download "$TOK_REPO" tokenizer.json --local-dir "$MODELS_DIR" >&2 \
-    || python3 -c "from huggingface_hub import hf_hub_download as d; d('$TOK_REPO','tokenizer.json',local_dir='$MODELS_DIR')" >&2
+  HF_HUB_DISABLE_XET=1 hf download "$TOK_REPO" tokenizer.json --local-dir "$MODELS_DIR" >&2 || \
+  python3 -c "from huggingface_hub import hf_hub_download as d; d('$TOK_REPO','tokenizer.json',local_dir='$MODELS_DIR')" >&2 || \
+  curl -fL --progress-bar "https://huggingface.co/${TOK_REPO}/resolve/main/tokenizer.json" \
+       -o "$MODELS_DIR/tokenizer.json" >&2
 }
 
 ensure_llamacpp() {  # $1 = arch ; builds llama-bench + llama-server (one-time, slow)
