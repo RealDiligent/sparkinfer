@@ -3,12 +3,12 @@
   "status": {
     "gpu": "RTX 5090 · sm_120 · CUDA 13",
     "model": "Qwen3-30B-A3B · Q4_K_M",
-    "frontier_tps": 197.22,
+    "frontier_tps": 240.11,
     "ref_name": "llama.cpp",
     "ref_tps": 365.73,
     "vram_gb": 21.4,
     "token_match": 0.97,
-    "kl": 0.1352
+    "kl": 0.147
   },
   "passes_gpu": "RTX PRO 6000",
   "passes": [
@@ -81,6 +81,18 @@
     }
   ],
   "prs": [
+    {
+      "num": 50,
+      "title": "Decode dp4a (MMVQ) default + argmax widen: 180.4 → 235.4 tok/s (+30.5%) on RTX 5090",
+      "areas": [
+        "kernels",
+        "runtime"
+      ],
+      "label": "XL",
+      "tps": 240.11,
+      "delta_pct": 21.7,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/50"
+    },
     {
       "num": 48,
       "title": "perf(kernels): multi-token register tiling in flash_decode_split (hd=128)",
@@ -337,6 +349,12 @@
       "name": "vectorize fused RMSNorm with",
       "tps": 197.22,
       "pr": 44,
+      "date": "2026-06-25"
+    },
+    {
+      "name": "Decode dp4a (MMVQ) default +",
+      "tps": 240.11,
+      "pr": 50,
       "date": "2026-06-25"
     }
   ]
