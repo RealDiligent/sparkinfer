@@ -82,6 +82,18 @@
   ],
   "prs": [
     {
+      "num": 45,
+      "title": "perf(kernels): CUDA-graph-safe RoPE __constant__ inv_freq table",
+      "areas": [
+        "kernels",
+        "runtime"
+      ],
+      "label": "none",
+      "tps": 183.4,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/45"
+    },
+    {
       "num": 44,
       "title": "perf(kernels): vectorize fused RMSNorm with 128-bit bf16x8 loads",
       "areas": [
