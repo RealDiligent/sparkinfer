@@ -104,6 +104,17 @@
   ],
   "prs": [
     {
+      "num": 27,
+      "title": "runtime/gguf: bounds-check tensor data region against file size (fix OOB read)",
+      "areas": [
+        "runtime"
+      ],
+      "label": "none",
+      "tps": 186.42,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/27"
+    },
+    {
       "num": 28,
       "title": "moe: default split-K down + PDL on Blackwell decode",
       "areas": [
