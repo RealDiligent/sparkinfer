@@ -104,6 +104,17 @@
   ],
   "prs": [
     {
+      "num": 23,
+      "title": "fix(bench): correct Blackwell arch labels in target configs",
+      "areas": [
+        "bench"
+      ],
+      "label": "none",
+      "tps": 186.29,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/23"
+    },
+    {
       "num": 26,
       "title": "runtime/gguf: clamp invalid general.alignment to default (fix divide-by-zero)",
       "areas": [
