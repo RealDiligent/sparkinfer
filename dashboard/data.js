@@ -83,6 +83,17 @@ window.SPARKINFER = {
   ],
   "prs": [
     {
+      "num": 43,
+      "title": "perf(kernels): vectorized K/V loads in flash_decode_split (hd=128)",
+      "areas": [
+        "kernels"
+      ],
+      "label": "none",
+      "tps": 187.96,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/43"
+    },
+    {
       "num": 9,
       "title": "fix(runtime/gguf): reject malformed metadata arrays instead of desyncing the parse cursor",
       "areas": [
