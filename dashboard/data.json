@@ -82,6 +82,17 @@
   ],
   "prs": [
     {
+      "num": 64,
+      "title": "perf(moe): __ldg quantized weight reads in expert FFN decode (+1.3%)",
+      "areas": [
+        "kernels"
+      ],
+      "label": "none",
+      "tps": 289.55,
+      "delta_pct": null,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/64"
+    },
+    {
       "num": 63,
       "title": "Parallelize flash-decode combine + n_splits=32 (+2.7% decode)",
       "areas": [
