@@ -83,6 +83,20 @@ window.SPARKINFER = {
   ],
   "prs": [
     {
+      "num": 67,
+      "title": "perf(moe): mmvq down split-K occupancy for M-tier decode",
+      "areas": [
+        "kernels",
+        "runtime"
+      ],
+      "label": "none",
+      "tps": 348.06,
+      "delta_pct": 0.0,
+      "top1": 0.95,
+      "kl": 0.1415,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/67"
+    },
+    {
       "num": 75,
       "title": "perf(moe): software-pipeline the int8 MoE down decode (+4% decode on RTX 5090)",
       "areas": [
@@ -158,18 +172,6 @@ window.SPARKINFER = {
       "tps": 313.14,
       "delta_pct": 5.3,
       "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/70"
-    },
-    {
-      "num": 67,
-      "title": "perf(moe): mmvq down split-K occupancy for M-tier decode",
-      "areas": [
-        "kernels",
-        "runtime"
-      ],
-      "label": "S",
-      "tps": 309.34,
-      "delta_pct": 4.0,
-      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/67"
     },
     {
       "num": 69,
