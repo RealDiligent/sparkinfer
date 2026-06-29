@@ -42,9 +42,9 @@ bench/scripts/accuracy.sh --download         # top-1 / KL / perplexity vs llama.
 ```
 
 > A note on the head-to-head: build llama.cpp with full CUDA optimization — an under-tuned llama
-> build will *understate* its tok/s and *overstate* our lead. Our published figure (**+4.5% at
-> 128-tok**, ~parity at long context) is against a fully-built llama.cpp; please compare apples to
-> apples.
+> build will *understate* its tok/s and *overstate* our lead. Our published figures (**+24.0% at
+> 128-tok, +21.6% at 256, +17.6% at 512**) are against a fully-built llama.cpp (CUDA, `sm_120`),
+> measured same-box, warm, and interleaved; please compare apples to apples.
 
 ## Deterministic vs non-deterministic (why the trust model is split)
 
