@@ -84,6 +84,20 @@ window.SPARKINFER = {
   ],
   "prs": [
     {
+      "num": 89,
+      "title": "perf(decode): run Q/K/V projections on concurrent CUDA streams (+5.7% decode)",
+      "areas": [
+        "runtime"
+      ],
+      "label": "S",
+      "tps": 443.38,
+      "delta_pct": 5.7,
+      "top1": 0.97,
+      "kl": 0.1417,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/89",
+      "proof_url": "https://gittensor-ai-lab.github.io/sparkinfer-log/?run=0089-4e13546"
+    },
+    {
       "num": 51,
       "title": "runtime: prompt-lookup speculative decoding for bs=1 MoE decode",
       "areas": [
