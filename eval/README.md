@@ -52,6 +52,11 @@ Set `SPARKINFER_EVAL_MODE=short` or pass `--eval-mode short` to keep the legacy 
 Labels: **REJECT** (failed correctness or the 2k no-regression gate) · **none** (within the significance gate) ·
 **XS · S · M · L · XL** (verified speedup bucket, by fraction of remaining headroom closed).
 
+Policy tests:
+```bash
+python3 bench/scripts/test_label.py
+```
+
 ## PR auto-evaluation bot
 
 `pr_eval_bot.py` polls open PRs and, for any PR with a **new head commit**, runs the evaluation,
