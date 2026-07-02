@@ -96,3 +96,7 @@ blocked. The real link is the carlh7777 ↔ thomasbaker9010251 opener/committer 
 **Active cover-up (decisive):** after #108 was closed, `bohdansolovie` **renamed it to "Hello" (17:33 UTC) then force-pushed the branch to `main` (17:35 UTC)** to erase the diff. #56 was force-pushed twice as well. Legitimate work is not retitled and force-erased after being flagged.
 
 **Action:** both added to `blocked-contributors.txt`; PRs #108/#109/#104/#56 labeled `flagged:gaming`; future PRs from either auto-flag, close, skip eval. Already-merged PRs (bohdansolovie #65; kiannidev #52/#44/#23/#22/#21) predate this and cannot be reversed. kiannidev's earlier #54/#57 override is superseded — the pattern continued.
+
+## 2026-07-02 — `Daedalus-Icarus` (auto-blocked)
+
+Auto-blocked after 1 copycat PRs (#132).
