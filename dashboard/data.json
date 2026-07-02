@@ -113,6 +113,27 @@
   ],
   "prs": [
     {
+      "num": 130,
+      "title": "perf(attn): uint4 ldg KV staging + GQA TILE=14",
+      "areas": [
+        "kernels"
+      ],
+      "label": "S",
+      "tps": 265.41,
+      "delta_pct": 5.3,
+      "top1": 0.9735,
+      "kl": 0.0075,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/130",
+      "eval_mode": "longctx",
+      "score_context": 16384,
+      "ctx_2048_tps": 277.78,
+      "ctx_16384_tps": 265.41,
+      "guard_2k_baseline": 277.78,
+      "guard_2k_ratio": 1.0,
+      "guard_2k_pass": true,
+      "proof_url": "https://gittensor-ai-lab.github.io/sparkinfer-log/?run=0130-abcd575"
+    },
+    {
       "num": 128,
       "title": "perf(gemv): specialize q4 mmvq common K",
       "areas": [
@@ -785,17 +806,6 @@
       "tps": 186.27,
       "delta_pct": null,
       "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/22"
-    },
-    {
-      "num": 23,
-      "title": "fix(bench): correct Blackwell arch labels in target configs",
-      "areas": [
-        "bench"
-      ],
-      "label": "none",
-      "tps": 186.29,
-      "delta_pct": null,
-      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/23"
     }
   ],
   "landed": [
