@@ -54,6 +54,7 @@ void launch_kv_append(void* k_pool, void* v_pool, const void* k_new, const void*
 }
 
 void launch_residual_add(const void* a, const void* b, void* out, int n, cudaStream_t stream) {
+    if (!a || !b || !out || n <= 0) return;
     int blocks = (n + 255) / 256;
     residual_add_kernel<<<blocks, 256, 0, stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(a), reinterpret_cast<const __nv_bfloat16*>(b),
