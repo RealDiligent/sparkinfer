@@ -394,8 +394,18 @@ int Qwen35Model::forward_token(int token_id, int position) {
     kernels::launch_argmax(s.logits, s.d_out_id, 1, c.vocab, st);
     if (s.bench_feedback_graph) kernels::launch_decode_feedback(s.d_scalars, s.d_out_id, st);
 
-    cu(cudaStreamEndCapture(st, &s.cu_graph), "end capture");
-    cu(cudaGraphInstantiate(&s.cu_exec, s.cu_graph, 0), "graph instantiate");
+    cudaError_t cap_err = cudaStreamEndCapture(st, &s.cu_graph);
+    if (cap_err != cudaSuccess) {
+        fprintf(stderr, "[qwen35] cudaStreamEndCapture: %s\n", cudaGetErrorString(cap_err));
+        return -1;
+    }
+    cudaError_t inst_err = cudaGraphInstantiate(&s.cu_exec, s.cu_graph, 0);
+    if (inst_err != cudaSuccess) {
+        fprintf(stderr, "[qwen35] cudaGraphInstantiate: %s\n", cudaGetErrorString(inst_err));
+        cudaGraphDestroy(s.cu_graph);
+        s.cu_graph = nullptr;
+        return -1;
+    }
     s.graph_ready = true;
     cu(cudaGraphLaunch(s.cu_exec, st), "graph launch (first)");
 
