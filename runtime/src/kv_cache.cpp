@@ -103,4 +103,10 @@ int    KVCacheManager::max_blocks_per_seq() const { return kMaxBlocksPerSeq; }
 int    KVCacheManager::num_free_blocks() const { return (int)impl_->free_list.size(); }
 int    KVCacheManager::num_total_blocks() const { return impl_->total_blocks; }
 
+int KVCacheManager::allocated_tokens(uint64_t seq_id) const {
+    auto it = impl_->seq_blocks.find(seq_id);
+    if (it == impl_->seq_blocks.end()) return 0;
+    return (int)it->second.size() * impl_->cfg.block_size;
+}
+
 } // namespace sparkinfer

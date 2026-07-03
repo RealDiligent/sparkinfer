@@ -50,6 +50,9 @@ public:
     int num_free_blocks() const;
     int num_total_blocks() const;
 
+    // Tokens covered by currently allocated physical blocks (0 if seq not allocated).
+    int allocated_tokens(uint64_t seq_id) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

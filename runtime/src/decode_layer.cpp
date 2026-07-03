@@ -68,7 +68,23 @@ void DecodeRunner::begin_step(const std::vector<int>& seq_lens_before) {
         return;
     }
     std::vector<int> after(n);
-    for (int i = 0; i < n; i++) after[i] = seq_lens_before[i] + 1;   // include the new token
+    for (int i = 0; i < n; i++) {
+        if (seq_lens_before[i] < 0) {
+            fprintf(stderr, "[decode] begin_step: seq %d negative length %d\n", i, seq_lens_before[i]);
+            return;
+        }
+        const int cap = p_->kv->allocated_tokens((uint64_t)i);
+        if (cap <= 0) {
+            fprintf(stderr, "[decode] begin_step: seq %d has no KV blocks allocated\n", i);
+            return;
+        }
+        if (seq_lens_before[i] >= cap) {
+            fprintf(stderr, "[decode] begin_step: seq %d position %d >= allocated %d tokens\n",
+                    i, seq_lens_before[i], cap);
+            return;
+        }
+        after[i] = seq_lens_before[i] + 1;   // include the new token
+    }
     cu(cudaMemcpy(p_->d_write_pos, seq_lens_before.data(), n * sizeof(int), cudaMemcpyHostToDevice), "wpos");
     cu(cudaMemcpy(p_->d_seq_lens,  after.data(),           n * sizeof(int), cudaMemcpyHostToDevice), "slens");
 }
