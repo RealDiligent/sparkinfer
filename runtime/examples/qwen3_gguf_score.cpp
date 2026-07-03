@@ -74,6 +74,19 @@ int main(int argc, char** argv) {
     if (!kv.allocate(0, cfg.max_seq)) { printf("[FAIL] KV allocate\n"); return 1; }
 
     const int V = cfg.vocab;
+    for (size_t i = 0; i < toks.size(); i++) {
+        if (toks[i] < 0 || toks[i] >= V) {
+            printf("[FAIL] token[%zu]=%d out of vocab range [0, %d)\n", (size_t)i, toks[i], V);
+            kv.free(0);
+            return 1;
+        }
+    }
+    if ((int)toks.size() > cfg.max_seq) {
+        printf("[FAIL] sequence length %zu exceeds max_seq=%d\n", toks.size(), cfg.max_seq);
+        kv.free(0);
+        return 1;
+    }
+
     std::vector<float> lg(V);
     std::vector<int> idx(V);
     double nll = 0.0; int scored = 0, ammatch = 0;
@@ -81,6 +94,11 @@ int main(int argc, char** argv) {
 
     for (size_t i = 0; i + 1 < toks.size(); i++) {
         int am = model.forward_token(toks[i], (int)i);   // logits predict token i+1
+        if (am < 0) {
+            printf("[FAIL] forward_token failed at position %zu\n", i);
+            kv.free(0);
+            return 1;
+        }
         model.copy_logits(lg.data());
         float mx = lg[0];
         for (int v = 1; v < V; v++) mx = std::max(mx, lg[v]);
