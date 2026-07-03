@@ -62,12 +62,22 @@ KVCacheManager::~KVCacheManager() {
 }
 
 bool KVCacheManager::allocate(uint64_t seq_id, int num_tokens) {
+    if (num_tokens <= 0) return false;
     const int need = (num_tokens + impl_->cfg.block_size - 1) / impl_->cfg.block_size;
-    if ((int)impl_->free_list.size() < need || impl_->free_slots.empty()) return false;
     if (need > kMaxBlocksPerSeq) return false;
 
     auto& blocks = impl_->seq_blocks[seq_id];
-    for (int i = 0; i < need; i++) { blocks.push_back(impl_->free_list.back()); impl_->free_list.pop_back(); }
+    const int have = (int)blocks.size();
+    const int grow = need - have;
+    if (grow > 0) {
+        if ((int)impl_->free_list.size() < grow) return false;
+        if (have == 0 && impl_->free_slots.empty()) return false;
+        for (int i = 0; i < grow; i++) {
+            blocks.push_back(impl_->free_list.back());
+            impl_->free_list.pop_back();
+        }
+    }
+    if (blocks.empty()) return false;
 
     int slot;
     auto it = impl_->seq_slot.find(seq_id);
