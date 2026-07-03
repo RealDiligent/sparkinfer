@@ -97,6 +97,14 @@ struct Qwen35Model::Impl {
                            // next layer's standalone QKV-input quantize node. =0 disables
 
     template <class T> T* alloc(size_t n) { void* p=nullptr; cu(cudaMalloc(&p, n*sizeof(T)), "malloc"); return (T*)p; }
+
+    void invalidate_decode_graph() {
+        if (graph_ready) {
+            cudaGraphExecDestroy(cu_exec);
+            cudaGraphDestroy(cu_graph);
+            graph_ready = false;
+        }
+    }
 };
 
 Qwen35Model::Qwen35Model(const Qwen35Config& cfg, KVCacheManager* kv, moe::MoEEngine* engine)
@@ -219,10 +227,15 @@ int Qwen35Model::forward_token(int token_id, int position) {
         if (want > Impl::MAX_NSPLITS) want = Impl::MAX_NSPLITS;
         if (want != s.n_splits) {                       // changed -> invalidate the captured graph
             s.n_splits = want;
-            if (s.graph_ready) {
-                cudaGraphExecDestroy(s.cu_exec); cudaGraphDestroy(s.cu_graph); s.graph_ready = false;
-            }
+            s.invalidate_decode_graph();
         }
+    }
+
+    if (!s.kv->block_table(s.seq_id)) {
+        s.invalidate_decode_graph();
+        fprintf(stderr, "[qwen35] forward_token: KV not allocated for seq %llu\n",
+                (unsigned long long)s.seq_id);
+        return -1;
     }
 
     // Capture the decode compute into a CUDA graph on the first token, then
@@ -416,6 +429,7 @@ double Qwen35Model::bench_decode(int warmup, int n, int context_tokens) {
         fprintf(stderr, "[bench] requested ctx=%d warmup=%d n=%d exceeds max_seq=%d\n",
                 start_pos, warmup, n, s.cfg.max_seq);
         s.kv->free(s.seq_id);
+        s.invalidate_decode_graph();
         return -1;
     }
     static int bench_device_loop = -1;
@@ -445,6 +459,7 @@ double Qwen35Model::bench_decode(int warmup, int n, int context_tokens) {
         auto t1 = std::chrono::high_resolution_clock::now();
         s.kv->free(s.seq_id);
         s.bench_feedback_graph = false;
+        s.invalidate_decode_graph();
         double secs = std::chrono::duration<double>(t1 - t0).count();
         return n / secs;
     }
@@ -455,6 +470,7 @@ double Qwen35Model::bench_decode(int warmup, int n, int context_tokens) {
     auto t1 = std::chrono::high_resolution_clock::now();
     s.kv->free(s.seq_id);
     s.bench_feedback_graph = false;
+    s.invalidate_decode_graph();
     double secs = std::chrono::duration<double>(t1 - t0).count();
     return n / secs;
 }
@@ -476,6 +492,7 @@ std::vector<int> Qwen35Model::generate(const std::vector<int>& prompt, int max_n
         if (gov) gov->pace();   // thermally-adaptive decode pacing (accuracy-preserving; no-op if disabled)
     }
     s.kv->free(s.seq_id);
+    s.invalidate_decode_graph();
     return out;
 }
 
