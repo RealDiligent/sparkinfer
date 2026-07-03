@@ -58,6 +58,7 @@ __global__ void fa_split_kernel(
     for (int t = start; t < end; t++) {
         const int blk = t / block_size, within = t % block_size;
         const int phys = block_table[seq * max_blocks + blk];
+        if (phys < 0) continue;
         const size_t base = ((size_t)(phys * block_size + within) * num_kv_heads + kvh) * HEAD_DIM;
         float p = 0.f;
         #pragma unroll
@@ -115,6 +116,7 @@ __global__ void fa_split_gqa_kernel(
     __nv_bfloat16* s_k = s_kv;
     __nv_bfloat16* s_v = s_kv + (size_t)TILE * HEAD_DIM;
     __shared__ size_t s_rowbase[TILE];   // per-token global row base, resolved once (not per head-dim)
+    __shared__ int s_valid[TILE];        // 1 when block_table maps to a physical block
 
     for (int t0 = start; t0 < end; t0 += TILE) {
         const int valid = min(TILE, end - t0);
@@ -124,18 +126,23 @@ __global__ void fa_split_gqa_kernel(
             const int t = t0 + threadIdx.x;
             const int blk = t / block_size, wb = t % block_size;
             const int phys = block_table[seq * max_blocks + blk];
-            s_rowbase[threadIdx.x] = ((size_t)(phys * block_size + wb) * num_kv_heads + kvh) * HEAD_DIM;
+            s_valid[threadIdx.x] = phys >= 0;
+            s_rowbase[threadIdx.x] = s_valid[threadIdx.x]
+                ? ((size_t)(phys * block_size + wb) * num_kv_heads + kvh) * HEAD_DIM
+                : 0;
         }
         __syncthreads();
         // Vectorized load: uint4 (8×bf16) via __ldg into bf16 smem.
         for (int i = threadIdx.x * 8; i < valid * HEAD_DIM; i += blockDim.x * 8) {
             const int within = i / HEAD_DIM, d = i % HEAD_DIM;
+            if (!s_valid[within]) continue;
             const size_t base = s_rowbase[within] + d;
             *reinterpret_cast<uint4*>(s_k + i) = __ldg(reinterpret_cast<const uint4*>(k_pool + base));
             *reinterpret_cast<uint4*>(s_v + i) = __ldg(reinterpret_cast<const uint4*>(v_pool + base));
         }
         __syncthreads();
         for (int tt = 0; tt < valid; tt++) {
+            if (!s_valid[tt]) continue;
             float p = 0.f;
             #pragma unroll
             for (int e = 0; e < ELEMS; e++) p += qr[e] * fa_to_f(s_k[tt * HEAD_DIM + lane + e * 32]);

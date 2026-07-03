@@ -64,6 +64,7 @@ __global__ void flash_decode_local_kernel(
 
     for (int blk = start_blk; blk < n_blocks; blk++) {
         const int phys     = block_table[seq * max_blocks_per_seq + blk];
+        if (phys < 0) continue;
         const int blk_base = blk * BLOCK_SIZE;
         const int hi       = min(BLOCK_SIZE, seq_len - blk_base);   // valid rows present
         const int lo       = max(0, window_start - blk_base);       // first attended row

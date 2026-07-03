@@ -68,6 +68,7 @@ __global__ void flash_decode_kernel(
         const int blk    = t / block_size;
         const int within = t % block_size;
         const int phys   = block_table[seq * max_blocks_per_seq + blk];
+        if (phys < 0) continue;
         const size_t base = ((size_t)(phys * block_size + within) * num_kv_heads + kv_head) * HEAD_DIM;
 
         // score = scale * <q, k_t>

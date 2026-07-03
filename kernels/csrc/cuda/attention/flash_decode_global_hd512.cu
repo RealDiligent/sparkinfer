@@ -68,6 +68,7 @@ __global__ void flash_decode_global_kernel(
 
     for (int blk = 0; blk < n_blocks; blk++) {
         const int phys  = block_table[seq * max_blocks_per_seq + blk];
+        if (phys < 0) continue;
         const int valid = min(BLOCK_SIZE, seq_len - blk * BLOCK_SIZE);
 
         for (int i = threadIdx.x; i < valid * HEAD_DIM; i += blockDim.x) {
