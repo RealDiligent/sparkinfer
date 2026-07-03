@@ -497,6 +497,7 @@ void* load_bin(const std::string& path, std::vector<void*>& owned) {
 
 bool Qwen35Model::load_weights(const std::string& dir) {
     Impl& s = *p_;
+    s.gguf = false;   // bin layout uses GEMM, not GGUF GEMV
     auto L = [&](const std::string& n) { return load_bin(dir + "/" + n + ".bin", s.owned); };
     s.w.embed_tokens = L("embed_tokens");
     s.w.final_norm   = L("final_norm");
