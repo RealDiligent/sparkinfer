@@ -97,6 +97,24 @@ struct Qwen35Model::Impl {
                            // next layer's standalone QKV-input quantize node. =0 disables
 
     template <class T> T* alloc(size_t n) { void* p=nullptr; cu(cudaMalloc(&p, n*sizeof(T)), "malloc"); return (T*)p; }
+
+    void invalidate_decode_graph() {
+        if (graph_ready) {
+            cudaGraphExecDestroy(cu_exec);
+            cudaGraphDestroy(cu_graph);
+            graph_ready = false;
+        }
+    }
+
+    // Abort a weight load: drop any captured graph and free partially uploaded tensors.
+    void rollback_load_state() {
+        invalidate_decode_graph();
+        for (void* b : owned) cudaFree(b);
+        owned.clear();
+        w = Qwen35Weights{};
+        w.layers.clear();
+        gguf = false;
+    }
 };
 
 Qwen35Model::Qwen35Model(const Qwen35Config& cfg, KVCacheManager* kv, moe::MoEEngine* engine)
@@ -219,9 +237,7 @@ int Qwen35Model::forward_token(int token_id, int position) {
         if (want > Impl::MAX_NSPLITS) want = Impl::MAX_NSPLITS;
         if (want != s.n_splits) {                       // changed -> invalidate the captured graph
             s.n_splits = want;
-            if (s.graph_ready) {
-                cudaGraphExecDestroy(s.cu_exec); cudaGraphDestroy(s.cu_graph); s.graph_ready = false;
-            }
+            s.invalidate_decode_graph();
         }
     }
 
@@ -497,11 +513,13 @@ void* load_bin(const std::string& path, std::vector<void*>& owned) {
 
 bool Qwen35Model::load_weights(const std::string& dir) {
     Impl& s = *p_;
+    s.rollback_load_state();
+    auto fail = [&]() -> bool { s.rollback_load_state(); return false; };
     auto L = [&](const std::string& n) { return load_bin(dir + "/" + n + ".bin", s.owned); };
     s.w.embed_tokens = L("embed_tokens");
     s.w.final_norm   = L("final_norm");
     s.w.lm_head      = L("lm_head");
-    if (!s.w.embed_tokens || !s.w.final_norm || !s.w.lm_head) return false;
+    if (!s.w.embed_tokens || !s.w.final_norm || !s.w.lm_head) return fail();
     s.w.layers.resize(s.cfg.n_layers);
     for (int i = 0; i < s.cfg.n_layers; i++) {
         std::string pfx = "layer_" + std::to_string(i) + ".";
@@ -515,7 +533,7 @@ bool Qwen35Model::load_weights(const std::string& dir) {
         if (s.cfg.n_shared > 0) {
             w.shared_gate = L(pfx + "shared_gate"); w.shared_up = L(pfx + "shared_up"); w.shared_down = L(pfx + "shared_down");
         }
-        if (!w.wq || !w.gate || !w.router_w) return false;
+        if (!w.wq || !w.gate || !w.router_w) return fail();
     }
     return true;
 }
@@ -523,10 +541,12 @@ bool Qwen35Model::load_weights(const std::string& dir) {
 // ----- native GGUF load: dense -> bf16 (dequant + transpose), experts kept quantized -----
 bool Qwen35Model::load_gguf(const std::string& path) {
     Impl& s = *p_;
-    const Qwen35Config& c = s.cfg;
-    s.gguf = true;   // dense weights kept native [out,in]; forward uses GEMV
+    s.rollback_load_state();
+    auto fail = [&]() -> bool { s.rollback_load_state(); return false; };
     GGUF g;
     if (!g.open(path)) return false;
+    s.gguf = true;   // dense weights kept native [out,in]; forward uses GEMV
+    const Qwen35Config& c = s.cfg;
 
     // Shared-expert tensors are optional in GGUF (Qwen3-30B-A3B has none). The
     // default config sets n_shared=1, so clamp it to what the file actually
@@ -563,14 +583,21 @@ bool Qwen35Model::load_gguf(const std::string& path) {
             fprintf(stderr, "[gguf] unsupported ggml type %d for %s\n", t->ggml_type, name.c_str());
             return nullptr;
         }
-        void* dq = nullptr; cudaMalloc(&dq, t->n_bytes);
+        void* dq = nullptr;
+        if (cudaMalloc(&dq, t->n_bytes) != cudaSuccess) return nullptr;
         cudaMemcpy(dq, t->data, t->n_bytes, cudaMemcpyHostToDevice);
-        void* tmp = nullptr; cudaMalloc(&tmp, (size_t)t->n_values * 2);
+        void* tmp = nullptr;
+        if (cudaMalloc(&tmp, (size_t)t->n_values * 2) != cudaSuccess) { cudaFree(dq); return nullptr; }
         kernels::launch_gguf_dequant(t->ggml_type, dq, tmp, t->n_values, s.stream);
         const void* result;
         if (transpose) {
             const int in = (int)t->dims[0], out = (int)t->dims[1];   // ggml ne0=in, ne1=out
-            void* dst = nullptr; cudaMalloc(&dst, (size_t)t->n_values * 2); s.owned.push_back(dst);
+            void* dst = nullptr;
+            if (cudaMalloc(&dst, (size_t)t->n_values * 2) != cudaSuccess) {
+                cudaStreamSynchronize(s.stream); cudaFree(tmp); cudaFree(dq);
+                return nullptr;
+            }
+            s.owned.push_back(dst);
             kernels::launch_transpose_bf16(tmp, dst, out, in, s.stream);   // [out,in]->[in,out]
             cudaStreamSynchronize(s.stream); cudaFree(tmp); cudaFree(dq);
             result = dst;
@@ -598,7 +625,7 @@ bool Qwen35Model::load_gguf(const std::string& path) {
     s.w.final_norm   = dense("output_norm.weight", false);
     const char* lm = g.tensor("output.weight") ? "output.weight" : "token_embd.weight";  // tied fallback
     s.w.lm_head = attn_w(lm, s.w.lm_head_type);               // native [vocab,hidden] for GEMV
-    if (!s.w.embed_tokens || !s.w.final_norm || !s.w.lm_head) return false;
+    if (!s.w.embed_tokens || !s.w.final_norm || !s.w.lm_head) return fail();
 
     s.w.layers.resize(c.n_layers);
     for (int i = 0; i < c.n_layers; i++) {
@@ -617,9 +644,9 @@ bool Qwen35Model::load_gguf(const std::string& path) {
             w.shared_gate = dense(b + "ffn_gate_shexp.weight", true);
             w.shared_up   = dense(b + "ffn_up_shexp.weight", true);
             w.shared_down = dense(b + "ffn_down_shexp.weight", true);
-            if (!w.shared_gate || !w.shared_up || !w.shared_down) return false;
+            if (!w.shared_gate || !w.shared_up || !w.shared_down) return fail();
         }
-        if (!w.wq || !w.router_w || !w.gate_q || !w.up_q || !w.down_q) return false;
+        if (!w.wq || !w.router_w || !w.gate_q || !w.up_q || !w.down_q) return fail();
         if (i == 0 || i == c.n_layers - 1) fprintf(stderr, "[gguf] layer %d loaded\n", i);
     }
     // decode scratch (mf_* / fa_*) is allocated in the constructor for all paths.
