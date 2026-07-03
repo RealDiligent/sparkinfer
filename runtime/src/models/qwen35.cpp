@@ -468,11 +468,15 @@ std::vector<int> Qwen35Model::generate(const std::vector<int>& prompt, int max_n
         return out;
     }
     int next = -1;
-    for (size_t i = 0; i < prompt.size(); i++) next = forward_token(prompt[i], (int)i);
+    for (size_t i = 0; i < prompt.size(); i++) {
+        next = forward_token(prompt[i], (int)i);
+        if (next < 0) { s.kv->free(s.seq_id); return out; }
+    }
     for (int i = 0; i < max_new; i++) {
         out.push_back(next);
         if (next == s.cfg.eos_id) break;
         next = forward_token(next, (int)prompt.size() + i);
+        if (next < 0) break;
         if (gov) gov->pace();   // thermally-adaptive decode pacing (accuracy-preserving; no-op if disabled)
     }
     s.kv->free(s.seq_id);
