@@ -298,15 +298,19 @@ int Qwen35Model::forward_token(int token_id, int position) {
         }
         bf16* kpool = (bf16*)s.kv->k_pool() + (size_t)L * s.kv->layer_stride_elems();
         bf16* vpool = (bf16*)s.kv->v_pool() + (size_t)L * s.kv->layer_stride_elems();
-        if (s.use_attnin) {   // fused QK-norm + RoPE + KV-append: 1 node vs qk-norm + rope-kv (2)
+        // Qwen3.5 requires per-head Q/K RMSNorm weights. load_* validates them, but
+        // set_weights() can still leave nulls; never pass those into the fused kernels.
+        const bool has_qknorm = w.q_norm && w.k_norm;
+        const bool use_attnin = s.use_attnin && has_qknorm;
+        if (use_attnin) {   // fused QK-norm + RoPE + KV-append: 1 node vs qk-norm + rope-kv (2)
             kernels::launch_qknorm_rope_kv_append(s.q, s.k, s.v, w.q_norm, w.k_norm, kpool, vpool,
                                                   btable, s.d_pos, 1, c.n_q_heads, c.n_kv_heads,
                                                   c.head_dim, c.rope_theta, c.rms_eps,
                                                   s.kv->block_size(), s.kv->max_blocks_per_seq(), st);
         } else {
-        if (s.use_qkfuse)
+        if (s.use_qkfuse && has_qknorm)
             kernels::launch_rmsnorm_qk(s.q, s.k, w.q_norm, w.k_norm, c.n_q_heads, c.n_kv_heads, c.head_dim, c.rms_eps, st);
-        else {
+        else if (has_qknorm) {
             kernels::launch_rmsnorm(s.q, w.q_norm, s.q, c.n_q_heads,  c.head_dim, c.rms_eps, st);
             kernels::launch_rmsnorm(s.k, w.k_norm, s.k, c.n_kv_heads, c.head_dim, c.rms_eps, st);
         }
@@ -322,7 +326,7 @@ int Qwen35Model::forward_token(int token_id, int position) {
         }
         // When the O-projection takes the Q4_K int8 MMVQ path, let the flash-decode combine emit
         // Q8_1(attn) straight into aq81 (deleting the standalone attn-quantize node below).
-        const bool emit_attn_q8 = s.use_attnin && s.gguf && s.use_pq && s.use_llama && w.wo_type == 12;
+        const bool emit_attn_q8 = use_attnin && s.gguf && s.use_pq && s.use_llama && w.wo_type == 12;
         kernels::launch_flash_decode_split(s.q, kpool, vpool, btable, s.d_seqlen, s.attn,
                                            s.fa_m, s.fa_l, s.fa_acc, 1, c.n_q_heads, c.n_kv_heads, c.head_dim,
                                            s.kv->block_size(), s.kv->max_blocks_per_seq(), s.n_splits,
@@ -515,7 +519,7 @@ bool Qwen35Model::load_weights(const std::string& dir) {
         if (s.cfg.n_shared > 0) {
             w.shared_gate = L(pfx + "shared_gate"); w.shared_up = L(pfx + "shared_up"); w.shared_down = L(pfx + "shared_down");
         }
-        if (!w.wq || !w.gate || !w.router_w) return false;
+        if (!w.wq || !w.gate || !w.router_w || !w.q_norm || !w.k_norm) return false;
     }
     return true;
 }
@@ -619,7 +623,7 @@ bool Qwen35Model::load_gguf(const std::string& path) {
             w.shared_down = dense(b + "ffn_down_shexp.weight", true);
             if (!w.shared_gate || !w.shared_up || !w.shared_down) return false;
         }
-        if (!w.wq || !w.router_w || !w.gate_q || !w.up_q || !w.down_q) return false;
+        if (!w.wq || !w.router_w || !w.gate_q || !w.up_q || !w.down_q || !w.q_norm || !w.k_norm) return false;
         if (i == 0 || i == c.n_layers - 1) fprintf(stderr, "[gguf] layer %d loaded\n", i);
     }
     // decode scratch (mf_* / fa_*) is allocated in the constructor for all paths.
