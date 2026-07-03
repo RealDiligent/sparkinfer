@@ -97,6 +97,25 @@ struct Qwen35Model::Impl {
                            // next layer's standalone QKV-input quantize node. =0 disables
 
     template <class T> T* alloc(size_t n) { void* p=nullptr; cu(cudaMalloc(&p, n*sizeof(T)), "malloc"); return (T*)p; }
+
+    void invalidate_decode_graph() {
+        if (graph_ready) {
+            cudaGraphExecDestroy(cu_exec);
+            cudaGraphDestroy(cu_graph);
+            graph_ready = false;
+        }
+    }
+
+    // Drop prior load_weights/load_gguf device allocations before binding new weights.
+    // Must run before freeing buffers: the captured decode graph holds weight pointers.
+    void release_device_weights() {
+        invalidate_decode_graph();
+        for (void* b : owned) cudaFree(b);
+        owned.clear();
+        w = Qwen35Weights{};
+        w.layers.clear();
+        gguf = false;
+    }
 };
 
 Qwen35Model::Qwen35Model(const Qwen35Config& cfg, KVCacheManager* kv, moe::MoEEngine* engine)
@@ -184,7 +203,10 @@ Qwen35Model::~Qwen35Model() {
     delete p_;
 }
 
-void Qwen35Model::set_weights(const Qwen35Weights& w) { p_->w = w; }
+void Qwen35Model::set_weights(const Qwen35Weights& w) {
+    p_->release_device_weights();
+    p_->w = w;
+}
 const Qwen35Config& Qwen35Model::config() const { return p_->cfg; }
 
 void Qwen35Model::copy_logits(float* host_logits) const {
@@ -219,9 +241,7 @@ int Qwen35Model::forward_token(int token_id, int position) {
         if (want > Impl::MAX_NSPLITS) want = Impl::MAX_NSPLITS;
         if (want != s.n_splits) {                       // changed -> invalidate the captured graph
             s.n_splits = want;
-            if (s.graph_ready) {
-                cudaGraphExecDestroy(s.cu_exec); cudaGraphDestroy(s.cu_graph); s.graph_ready = false;
-            }
+            s.invalidate_decode_graph();
         }
     }
 
@@ -497,6 +517,7 @@ void* load_bin(const std::string& path, std::vector<void*>& owned) {
 
 bool Qwen35Model::load_weights(const std::string& dir) {
     Impl& s = *p_;
+    s.release_device_weights();
     auto L = [&](const std::string& n) { return load_bin(dir + "/" + n + ".bin", s.owned); };
     s.w.embed_tokens = L("embed_tokens");
     s.w.final_norm   = L("final_norm");
@@ -523,6 +544,7 @@ bool Qwen35Model::load_weights(const std::string& dir) {
 // ----- native GGUF load: dense -> bf16 (dequant + transpose), experts kept quantized -----
 bool Qwen35Model::load_gguf(const std::string& path) {
     Impl& s = *p_;
+    s.release_device_weights();
     const Qwen35Config& c = s.cfg;
     s.gguf = true;   // dense weights kept native [out,in]; forward uses GEMV
     GGUF g;
