@@ -96,7 +96,10 @@ void launch_moe_expert_ffn(
     if (smem > 48 * 1024 && smem != cur) {
         cudaError_t e = cudaFuncSetAttribute(moe_expert_ffn_kernel,
             cudaFuncAttributeMaxDynamicSharedMemorySize, (int)smem);
-        if (e != cudaSuccess) fprintf(stderr, "[moe_ffn] smem opt-in failed: %s\n", cudaGetErrorString(e));
+        if (e != cudaSuccess) {
+            fprintf(stderr, "[moe_ffn] smem opt-in failed: %s — skipping launch\n", cudaGetErrorString(e));
+            return;
+        }
         cur = smem;
     }
     moe_expert_ffn_kernel<<<num_tokens, 256, smem, stream>>>(
