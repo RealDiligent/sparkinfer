@@ -128,6 +128,49 @@ window.SPARKINFER = {
   ],
   "prs": [
     {
+      "num": 137,
+      "title": "perf(decode): occupancy-first n_splits schedule (+8.8% @ 4k over #136)",
+      "areas": [
+        "runtime"
+      ],
+      "label": "REJECT",
+      "tps": 470.98,
+      "delta_pct": 0.0,
+      "top1": 0.9823,
+      "kl": 0.0102,
+      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/137",
+      "eval_mode": "longctx",
+      "score_context": 512,
+      "best_context_label": "512-context",
+      "context_gains_pct": {
+        "128-context": -0.01,
+        "512-context": 0.02,
+        "4k-context": -2.64,
+        "16k-context": -0.39
+      },
+      "regression_labels": [
+        "regression-4k"
+      ],
+      "auto_close": true,
+      "ctx_128_tps": 495.26,
+      "ctx_512_tps": 470.98,
+      "ctx_4096_tps": 383.36,
+      "ctx_16384_tps": 263.56,
+      "guard_128_baseline": 495.3,
+      "guard_128_ratio": 0.9999,
+      "guard_128_pass": true,
+      "guard_512_baseline": 470.89,
+      "guard_512_ratio": 1.0002,
+      "guard_512_pass": true,
+      "guard_4k_baseline": 393.75,
+      "guard_4k_ratio": 0.9736,
+      "guard_4k_pass": false,
+      "guard_16k_baseline": 264.59,
+      "guard_16k_ratio": 0.9961,
+      "guard_16k_pass": true,
+      "proof_url": "https://gittensor-ai-lab.github.io/sparkinfer-log/?run=0137-bbe0cb0"
+    },
+    {
       "num": 138,
       "title": "perf(decode): use 128-split mid-context plateau",
       "areas": [
@@ -878,17 +921,6 @@ window.SPARKINFER = {
       "tps": 0,
       "delta_pct": null,
       "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/17"
-    },
-    {
-      "num": 19,
-      "title": "moe/engine: guard forward() against num_tokens exceeding scratch capacity",
-      "areas": [
-        "moe"
-      ],
-      "label": "none",
-      "tps": 186.29,
-      "delta_pct": null,
-      "url": "https://github.com/gittensor-ai-lab/sparkinfer/pull/19"
     }
   ],
   "landed": [
