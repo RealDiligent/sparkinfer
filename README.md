@@ -54,16 +54,20 @@ SN74 rewards verified speedups. The loop is intentionally tight:
 
 This keeps rewards tied to marginal speed on shipped code, not claims in a PR description.
 
-## Why a custom engine
+## Why SPARKINFER
 
-Datacenter engines optimize throughput for multi-user serving. llama.cpp is the portable baseline.
-sparkinfer targets the gap between them: single-device, single-stream decode on consumer Blackwell
-where bytes-per-token and kernel launch overhead decide whether local agents feel usable.
+Most LLM inference engines were built for datacenter GPUs and cloud AI. On consumer GPUs they can be
+hard to install, power-hungry, thermally awkward, and slow to adapt to new SOTA models or algorithms
+because the codebases are large and maintenance-heavy. Agent workflows often arrive as optional
+features rather than the default design center.
 
-- **Blackwell-first.** Kernels are written for `sm_120` / `sm_121`, not treated as a fallback target.
-- **MoE-specific.** Experts stay quantized-resident; decode focuses on reading fewer bytes per token.
-- **Small and auditable.** CUDA kernels are readable, benchmarked directly, and easy to fork.
-- **Eval-driven.** Speed only counts when the same-box bot verifies it and correctness holds.
+SPARKINFER solves this for local Blackwell AI:
+
+- **Fastest.** Frontier decode on RTX 5090 across 128, 512, 4k, and 16k context.
+- **Smallest.** A native runtime binary measured in megabytes, not gigabytes.
+- **Power-optimized.** Built for consumer and edge GPUs where thermals and watts matter.
+- **SOTA-ready.** Designed to move quickly with new MoE models, quantization paths, and decode algorithms.
+- **Agent-native.** Local, private inference for your data without cloud dependency or operational worry.
 
 ## Quickstart
 
