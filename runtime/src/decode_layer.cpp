@@ -28,7 +28,7 @@ struct DecodeRunner::Impl {
 
     // scratch (bf16 unless noted)
     bf16 *xn, *q, *k, *v, *attnout, *ao, *h, *hn, *moeout;
-    int *d_seq_lens, *d_write_pos;
+    int *d_seq_lens, *d_write_pos, *d_batch_btable;
 
     template <class T> T* alloc(size_t n) { void* p = nullptr; cu(cudaMalloc(&p, n * sizeof(T)), "malloc"); return (T*)p; }
 };
@@ -51,26 +51,51 @@ DecodeRunner::DecodeRunner(int hidden, AttnConfig attn, KVCacheManager* kv,
     p_->moeout  = p_->alloc<bf16>((size_t)M * hidden);
     p_->d_seq_lens  = p_->alloc<int>(M);
     p_->d_write_pos = p_->alloc<int>(M);
+    p_->d_batch_btable = p_->alloc<int>((size_t)M * kv->max_blocks_per_seq());
 }
 
 DecodeRunner::~DecodeRunner() {
     cudaFree(p_->xn); cudaFree(p_->q); cudaFree(p_->k); cudaFree(p_->v);
     cudaFree(p_->attnout); cudaFree(p_->ao); cudaFree(p_->h); cudaFree(p_->hn); cudaFree(p_->moeout);
-    cudaFree(p_->d_seq_lens); cudaFree(p_->d_write_pos);
+    cudaFree(p_->d_seq_lens); cudaFree(p_->d_write_pos); cudaFree(p_->d_batch_btable);
     delete p_;
 }
 
-void DecodeRunner::begin_step(const std::vector<int>& seq_lens_before) {
+void DecodeRunner::begin_step(const std::vector<uint64_t>& seq_ids,
+                              const std::vector<int>& seq_lens_before) {
     const int n = (int)seq_lens_before.size();
     if (n <= 0 || n > p_->max_batch) {
         fprintf(stderr, "[decode] begin_step: num_seqs %d out of range (max_batch=%d)\n",
                 n, p_->max_batch);
         return;
     }
+    if ((int)seq_ids.size() != n) {
+        fprintf(stderr, "[decode] begin_step: seq_ids size %zu != seq_lens size %d\n",
+                seq_ids.size(), n);
+        return;
+    }
+    const int row_ints = p_->kv->max_blocks_per_seq();
+    const size_t row_bytes = (size_t)row_ints * sizeof(int);
+    for (int b = 0; b < n; b++) {
+        int* src = p_->kv->block_table(seq_ids[b]);
+        if (!src) {
+            fprintf(stderr, "[decode] begin_step: seq_id %llu (batch %d) has no KV blocks\n",
+                    (unsigned long long)seq_ids[b], b);
+            return;
+        }
+        cu(cudaMemcpy(p_->d_batch_btable + (size_t)b * row_ints, src, row_bytes,
+                      cudaMemcpyDeviceToDevice), "pack block table");
+    }
     std::vector<int> after(n);
     for (int i = 0; i < n; i++) after[i] = seq_lens_before[i] + 1;   // include the new token
     cu(cudaMemcpy(p_->d_write_pos, seq_lens_before.data(), n * sizeof(int), cudaMemcpyHostToDevice), "wpos");
     cu(cudaMemcpy(p_->d_seq_lens,  after.data(),           n * sizeof(int), cudaMemcpyHostToDevice), "slens");
+}
+
+void DecodeRunner::begin_step(const std::vector<int>& seq_lens_before) {
+    std::vector<uint64_t> seq_ids(seq_lens_before.size());
+    for (size_t i = 0; i < seq_ids.size(); i++) seq_ids[i] = i;
+    begin_step(seq_ids, seq_lens_before);
 }
 
 void DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
@@ -83,23 +108,36 @@ void DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
         return;
     }
     const int H = s.hidden, Q = s.qdim, KV = s.kvdim;
+    const float eps = s.attn.rms_eps;
     kernels::GemmConfig gc{};
 
     // 1. pre-attention norm
-    kernels::launch_rmsnorm(x, w.attn_norm, s.xn, num_seqs, H, 1e-6f, stream);
+    kernels::launch_rmsnorm(x, w.attn_norm, s.xn, num_seqs, H, eps, stream);
 
     // 2. Q/K/V projections
     kernels::launch_gemm(s.xn, w.wq, s.q, num_seqs, Q,  H, 1.f, 0.f, gc, stream);
     kernels::launch_gemm(s.xn, w.wk, s.k, num_seqs, KV, H, 1.f, 0.f, gc, stream);
     kernels::launch_gemm(s.xn, w.wv, s.v, num_seqs, KV, H, 1.f, 0.f, gc, stream);
 
-    // 3. append new K/V into the paged cache for this layer
+    // 3. per-head QK-norm + RoPE + paged KV append (matches Qwen35Model::forward_token)
     bf16* kpool = (bf16*)s.kv->k_pool() + (size_t)layer * s.kv->layer_stride_elems();
     bf16* vpool = (bf16*)s.kv->v_pool() + (size_t)layer * s.kv->layer_stride_elems();
-    int* btable = s.kv->block_table(0);   // batch occupies slots 0..num_seqs-1
-    launch_kv_append(kpool, vpool, s.k, s.v, btable, s.d_write_pos,
-                     num_seqs, s.attn.num_kv_heads, s.attn.head_dim,
-                     s.kv->block_size(), s.kv->max_blocks_per_seq(), stream);
+    int* btable = s.d_batch_btable;   // batch-indexed rows packed in begin_step()
+    if (w.q_norm && w.k_norm) {
+        kernels::launch_qknorm_rope_kv_append(
+            s.q, s.k, s.v, w.q_norm, w.k_norm, kpool, vpool, btable, s.d_write_pos,
+            num_seqs, s.attn.num_q_heads, s.attn.num_kv_heads, s.attn.head_dim,
+            s.attn.rope_theta, eps, s.kv->block_size(), s.kv->max_blocks_per_seq(), stream);
+    } else if (s.attn.rope_theta > 0.f) {
+        kernels::launch_rope_kv_append(
+            s.q, s.k, s.v, kpool, vpool, btable, s.d_write_pos,
+            num_seqs, s.attn.num_q_heads, s.attn.num_kv_heads, s.attn.head_dim,
+            s.attn.rope_theta, s.kv->block_size(), s.kv->max_blocks_per_seq(), stream);
+    } else {
+        launch_kv_append(kpool, vpool, s.k, s.v, btable, s.d_write_pos,
+                         num_seqs, s.attn.num_kv_heads, s.attn.head_dim,
+                         s.kv->block_size(), s.kv->max_blocks_per_seq(), stream);
+    }
 
     // 4. GQA flash decode over the paged cache
     kernels::launch_flash_decode_gqa8(s.q, kpool, vpool, btable, s.d_seq_lens, s.attnout,
@@ -110,7 +148,7 @@ void DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
     // 5. output projection + residual + post-attention norm
     kernels::launch_gemm(s.attnout, w.wo, s.ao, num_seqs, H, Q, 1.f, 0.f, gc, stream);
     launch_residual_add(x, s.ao, s.h, num_seqs * H, stream);          // h = x + attn
-    kernels::launch_rmsnorm(s.h, w.ffn_norm, s.hn, num_seqs, H, 1e-6f, stream);
+    kernels::launch_rmsnorm(s.h, w.ffn_norm, s.hn, num_seqs, H, eps, stream);
 
     // 6. sync-free MoE FFN + residual
     s.moe->set_layer_weights(layer, w.moe);
