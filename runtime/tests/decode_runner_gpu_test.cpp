@@ -73,8 +73,10 @@ int main() {
 
     cudaStream_t stream; cudaStreamCreate(&stream);
     std::vector<int> lens(seqs, 7);                 // 7 tokens already cached
-    runner.begin_step(lens);
-    for (int l = 0; l < layers; l++) runner.decode_layer(l, x, seqs, w[l], stream);
+    if (!runner.begin_step(lens)) { printf("[FAIL] begin_step\n"); return 1; }
+    for (int l = 0; l < layers; l++) {
+        if (!runner.decode_layer(l, x, seqs, w[l], stream)) { printf("[FAIL] decode_layer %d\n", l); return 1; }
+    }
     cudaStreamSynchronize(stream);
 
     cudaError_t err = cudaGetLastError();

@@ -60,27 +60,28 @@ DecodeRunner::~DecodeRunner() {
     delete p_;
 }
 
-void DecodeRunner::begin_step(const std::vector<int>& seq_lens_before) {
+bool DecodeRunner::begin_step(const std::vector<int>& seq_lens_before) {
     const int n = (int)seq_lens_before.size();
     if (n <= 0 || n > p_->max_batch) {
         fprintf(stderr, "[decode] begin_step: num_seqs %d out of range (max_batch=%d)\n",
                 n, p_->max_batch);
-        return;
+        return false;
     }
     std::vector<int> after(n);
     for (int i = 0; i < n; i++) after[i] = seq_lens_before[i] + 1;   // include the new token
     cu(cudaMemcpy(p_->d_write_pos, seq_lens_before.data(), n * sizeof(int), cudaMemcpyHostToDevice), "wpos");
     cu(cudaMemcpy(p_->d_seq_lens,  after.data(),           n * sizeof(int), cudaMemcpyHostToDevice), "slens");
+    return true;
 }
 
-void DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
+bool DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
                                 const TransformerLayerWeights& w, cudaStream_t stream) {
     Impl& s = *p_;
-    if (num_seqs <= 0) return;
+    if (num_seqs <= 0) return false;
     if (num_seqs > s.max_batch) {
         fprintf(stderr, "[decode] decode_layer: num_seqs %d exceeds max_batch %d — skipping\n",
                 num_seqs, s.max_batch);
-        return;
+        return false;
     }
     const int H = s.hidden, Q = s.qdim, KV = s.kvdim;
     kernels::GemmConfig gc{};
@@ -116,6 +117,7 @@ void DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
     s.moe->set_layer_weights(layer, w.moe);
     s.moe->forward(s.hn, s.moeout, num_seqs, layer, stream);
     launch_residual_add(s.h, s.moeout, x, num_seqs * H, stream);      // x = h + moe
+    return true;
 }
 
 } // namespace sparkinfer

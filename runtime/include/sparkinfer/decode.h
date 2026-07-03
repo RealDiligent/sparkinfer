@@ -37,10 +37,12 @@ public:
 
     // Begin a decode step: set the new-token position for each sequence
     // (host seq_lens = length BEFORE this token). Uploads positions to device.
-    void begin_step(const std::vector<int>& seq_lens_before);
+    // Returns false on invalid batch size.
+    bool begin_step(const std::vector<int>& seq_lens_before);
 
     // Run one layer in-place on x: [num_seqs, hidden] (bf16, device).
-    void decode_layer(int layer, void* x, int num_seqs,
+    // Returns false when inputs are invalid or the layer is skipped.
+    bool decode_layer(int layer, void* x, int num_seqs,
                       const TransformerLayerWeights& w, cudaStream_t stream);
 
 private:
