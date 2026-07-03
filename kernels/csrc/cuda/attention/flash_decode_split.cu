@@ -14,6 +14,7 @@
 #include <cuda_bf16.h>
 #ifndef SPARKINFER_NVRTC_DEVICE_ONLY
 #include <cuda_runtime.h>
+#include <cstdio>
 #endif
 
 namespace sparkinfer {
@@ -283,6 +284,10 @@ void launch_flash_decode_split(
     int block_size, int max_blocks, int n_splits, float scale, cudaStream_t stream,
     void* out_q8
 ) {
+    if (head_dim != 128) {
+        fprintf(stderr, "[flash_decode_split] unsupported head_dim=%d (only 128 compiled)\n", head_dim);
+        return;
+    }
     static int fagqa = -1;
     if (fagqa < 0) {
         const char* e = getenv("SPARKINFER_FAGQA");
@@ -299,7 +304,6 @@ void launch_flash_decode_split(
             part_m, part_l, part_acc, scale, num_q_heads, num_kv_heads, block_size, max_blocks, n_splits);
         fa_launch_combine_dispatch(part_m, part_l, part_acc, reinterpret_cast<__nv_bfloat16*>(out),
                                    num_q_heads, n_splits, reinterpret_cast<fa_block_q8_1*>(out_q8), num_seqs, stream);
-        (void)head_dim;
         return;
     }
     dim3 g1(num_q_heads * n_splits, num_seqs);
@@ -309,7 +313,6 @@ void launch_flash_decode_split(
         part_m, part_l, part_acc, scale, num_q_heads, num_kv_heads, block_size, max_blocks, n_splits);
     fa_launch_combine_dispatch(part_m, part_l, part_acc, reinterpret_cast<__nv_bfloat16*>(out),
                                num_q_heads, n_splits, reinterpret_cast<fa_block_q8_1*>(out_q8), num_seqs, stream);
-    (void)head_dim;
 }
 #endif
 
