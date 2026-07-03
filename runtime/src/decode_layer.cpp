@@ -102,7 +102,12 @@ bool DecodeRunner::decode_layer(int layer, void* x, int num_seqs,
                      num_seqs, s.attn.num_kv_heads, s.attn.head_dim,
                      s.kv->block_size(), s.kv->max_blocks_per_seq(), stream);
 
-    // 4. GQA flash decode over the paged cache
+    // 4. GQA flash decode over the paged cache (kernel assumes 8:1 Q:KV ratio)
+    if (s.attn.num_q_heads != s.attn.num_kv_heads * 8) {
+        fprintf(stderr, "[decode] decode_layer: GQA ratio %d:%d unsupported (need 8:1)\n",
+                s.attn.num_q_heads, s.attn.num_kv_heads);
+        return false;
+    }
     kernels::launch_flash_decode_gqa8(s.q, kpool, vpool, btable, s.d_seq_lens, s.attnout,
                                       num_seqs, s.attn.num_kv_heads, s.attn.head_dim,
                                       s.kv->block_size(), s.kv->max_blocks_per_seq(),
