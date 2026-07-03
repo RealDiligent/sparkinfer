@@ -40,12 +40,22 @@ public:
     }
 
     void set_layer_weights(int layer, const LayerWeights& w) override {
-        if (layer >= 0 && layer < (int)weights_.size()) weights_[layer] = w;
+        if (layer < 0 || layer >= (int)weights_.size()) {
+            fprintf(stderr, "[moe] set_layer_weights: layer %d out of range [0, %zu)\n",
+                    layer, weights_.size());
+            return;
+        }
+        weights_[layer] = w;
     }
 
     void forward(const void* input, void* output, int num_tokens, int layer,
                  cudaStream_t stream) override {
         if (num_tokens <= 0) return;
+        if (layer < 0 || layer >= (int)weights_.size()) {
+            fprintf(stderr, "[moe] forward: layer %d out of range [0, %zu) — skipping\n",
+                    layer, weights_.size());
+            return;
+        }
         if (num_tokens > max_tokens_) {
             // Router/top-k scratch is sized for max_tokens_; a larger batch would
             // overflow d_logits_/d_ids_/d_weights_ (OOB device writes). Refuse instead.
