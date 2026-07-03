@@ -196,6 +196,10 @@ void Qwen35Model::copy_logits(float* host_logits) const {
 int Qwen35Model::forward_token(int token_id, int position) {
     Impl& s = *p_;
     const Qwen35Config& c = s.cfg;
+    if (!s.w.embed_tokens || s.w.layers.empty() || !s.w.layers[0].input_norm || !s.w.final_norm) {
+        fprintf(stderr, "[qwen35] forward_token: RMSNorm weights not loaded\n");
+        return -1;
+    }
     const int H = c.hidden;
     kernels::GemmConfig gc{};
     int seqlen = position + 1;
@@ -251,6 +255,15 @@ int Qwen35Model::forward_token(int token_id, int position) {
 
     for (int L = 0; L < c.n_layers; L++) {
         const Qwen35LayerWeights& w = s.w.layers[L];
+        if (!w.post_attn_norm) {
+            fprintf(stderr, "[qwen35] forward_token: layer %d missing post_attn_norm\n", L);
+            return -1;
+        }
+        const void* nextnorm = (L + 1 < c.n_layers) ? s.w.layers[L + 1].input_norm : s.w.final_norm;
+        if (!nextnorm) {
+            fprintf(stderr, "[qwen35] forward_token: layer %d missing next input norm\n", L);
+            return -1;
+        }
         if (s.gguf) {   // GGUF dense weights are native [out,in] -> coalesced GEMV
             // Q/K/V all read xn: quantize it to Q8_1 ONCE, then dp4a each Q4_K proj against it
             // (no per-block, per-GEMV re-quant). Q6_K/bf16 weights keep their existing path.
@@ -349,6 +362,10 @@ int Qwen35Model::forward_token(int token_id, int position) {
             kernels::launch_add_rmsnorm2(s.x, s.ao, w.post_attn_norm, s.h, s.hn, 1, H, c.rms_eps, st);
 
         if (w.gate_q) {   // GGUF fused: route, then dequant-on-read only the top_k experts
+            if (!w.router_w) {
+                fprintf(stderr, "[qwen35] forward_token: layer %d missing router_w\n", L);
+                return -1;
+            }
             kernels::launch_gemv_f32(s.hn, w.router_w, s.mf_logits, c.n_experts, c.hidden, st);  // router_w native [E,H]
             // The per-expert token counts only feed the batched-dispatch sort; the single-token
             // decode expert FFN reads ids/weights directly and never touches them. Zeroing that
@@ -377,7 +394,6 @@ int Qwen35Model::forward_token(int token_id, int position) {
             launch_residual_add(s.routed, s.shared, s.routed, H, st);
         }
         // fused: x = h + routed ; xn = RMSNorm(x, next input_norm or final_norm)
-        const void* nextnorm = (L + 1 < c.n_layers) ? s.w.layers[L + 1].input_norm : s.w.final_norm;
         if (fnq)
             kernels::launch_add_rmsnorm2_q8(s.h, s.routed, nextnorm, s.x, s.xn, s.aq81, H, c.rms_eps, st);
         else
