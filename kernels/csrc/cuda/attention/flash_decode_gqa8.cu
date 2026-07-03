@@ -12,6 +12,7 @@
 #include <cuda_fp16.h>
 #ifndef SPARKINFER_NVRTC_DEVICE_ONLY
 #include <cuda_runtime.h>
+#include <cstdio>
 #endif
 
 namespace sparkinfer {
@@ -113,6 +114,10 @@ void launch_flash_decode_gqa8(
     int head_dim, int block_size, int max_blocks_per_seq,
     float scale, cudaStream_t stream
 ) {
+    if (head_dim != 128) {
+        fprintf(stderr, "[flash_decode_gqa8] unsupported head_dim=%d (only 128 compiled)\n", head_dim);
+        return;
+    }
     constexpr int NWARPS = 8, BLOCK_SIZE = 16, HEAD_DIM = 128;
     const int num_q_heads = num_kv_heads * NWARPS;
     dim3 grid(num_seqs, num_kv_heads);
