@@ -45,6 +45,7 @@ bool ggml_dequant_supported(int ggml_type) {
         case 1:  // F16
         case 8:  // Q8_0
         case 12: // Q4_K
+        case 13: // Q5_K (UD / dynamic quants mix this in)
         case 14: // Q6_K
             return true;
         default:
