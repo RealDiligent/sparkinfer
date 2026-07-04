@@ -83,7 +83,7 @@ P_DIFF_REF="${SPARKINFER_P_LLAMA_128_BASELINE:-0}"
 # _REPS=0 skips 32k (median_ctx returns 0 -> excluded from scoring + guards); the 3 live contexts get
 # 3-rep medians for a stable scored number. Re-enable 16k/32k by passing their reps + baselines.
 PRIMARY_JSON="$(run_model primary "$P_FILE" "$P_REPO" "$P_TOK" "$PRIMARY_FRONTIER" \
-  MODELS_DIR="$P_DIR" \
+  MODELS_DIR="$P_DIR" MODEL_SHA256="${QWEN36_MODEL_SHA256:-}" \
   SPARKINFER_SCORE_REPS=0 SPARKINFER_GUARD_32K_REPS=0 \
   SPARKINFER_GUARD_REPS=3 SPARKINFER_GUARD_512_REPS=3 SPARKINFER_GUARD_4K_REPS=3 \
   SPARKINFER_DIFFICULTY_BOOST=1 SPARKINFER_DIFFICULTY_REF="${P_DIFF_REF:-365.85}" \
