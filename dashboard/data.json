@@ -3,12 +3,12 @@
   "status": {
     "gpu": "RTX 5090 · sm_120 · CUDA 13",
     "model": "Qwen3-30B-A3B · Q4_K_M",
-    "frontier_tps": 493.56,
+    "frontier_tps": 558.22,
     "ref_name": "llama.cpp",
     "ref_tps": 365.85,
     "vram_gb": 21.4,
-    "token_match": 0.9612,
-    "kl": 0.0175,
+    "token_match": 0.97,
+    "kl": 0.02,
     "ref_note": "128-tok decode rerun on current main, same RTX 5090 · Q4_K_M GGUF",
     "longctx_16k_tps": 330.2,
     "longctx_2k_tps": 277.78,
@@ -1377,6 +1377,12 @@
       "tps": 484.79,
       "pr": 122,
       "date": "2026-07-02"
+    },
+    {
+      "name": "split-K the bf16 dense proje",
+      "tps": 558.22,
+      "pr": 241,
+      "date": "2026-07-06"
     }
   ],
   "landed_longctx": [
