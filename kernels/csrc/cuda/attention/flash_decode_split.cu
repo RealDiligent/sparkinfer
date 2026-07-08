@@ -295,6 +295,8 @@ template __global__ void fa_split_kernel<256>(const __nv_bfloat16*, const void*,
     const int*, const int*, float*, float*, float*, float, int, int, int, int, int, const __half*, const __half*, int);
 template __global__ void fa_split_gqa_kernel<256, 8, FA_GQA_TILE, false>(const __nv_bfloat16*, const void*, const void*,
     const int*, const int*, float*, float*, float*, float, int, int, int, int, int, const __half*, const __half*);
+template __global__ void fa_split_gqa_kernel<256, 8, FA_GQA_TILE, true>(const __nv_bfloat16*, const void*, const void*,
+    const int*, const int*, float*, float*, float*, float, int, int, int, int, int, const __half*, const __half*);
 template __global__ void fa_combine_kernel<256, FA_COMBINE_DG, FA_COMBINE_NW>(const float*, const float*, const float*, __nv_bfloat16*, int, int, fa_block_q8_1*);
 
 #ifndef SPARKINFER_NVRTC_DEVICE_ONLY
@@ -538,11 +540,20 @@ void launch_flash_decode_split(
                 (void)seqlen;
                 return;
             }
+            // Scalar/tile GQA fallback (short context or MMA off). The int8 cache is resident for the
+            // whole run, so when int8_kv is on the tile kernel MUST dequant int8->bf16 in smem (the
+            // <256,...,true> instantiation) — reading the int8 pool as bf16 would be garbage.
             const size_t smem = (size_t)2 * TILE * 256 * sizeof(__nv_bfloat16);
-            fa_split_gqa_kernel<256, GQA, TILE, false><<<gq, GQA * 32, smem, stream>>>(
-                reinterpret_cast<const __nv_bfloat16*>(q), k_pool, v_pool, block_table, seq_lens,
-                part_m, part_l, part_acc, scale, num_q_heads, num_kv_heads, block_size, max_blocks, n_splits,
-                reinterpret_cast<const __half*>(k_scale), reinterpret_cast<const __half*>(v_scale));
+            if (int8_kv)
+                fa_split_gqa_kernel<256, GQA, TILE, true><<<gq, GQA * 32, smem, stream>>>(
+                    reinterpret_cast<const __nv_bfloat16*>(q), k_pool, v_pool, block_table, seq_lens,
+                    part_m, part_l, part_acc, scale, num_q_heads, num_kv_heads, block_size, max_blocks, n_splits,
+                    reinterpret_cast<const __half*>(k_scale), reinterpret_cast<const __half*>(v_scale));
+            else
+                fa_split_gqa_kernel<256, GQA, TILE, false><<<gq, GQA * 32, smem, stream>>>(
+                    reinterpret_cast<const __nv_bfloat16*>(q), k_pool, v_pool, block_table, seq_lens,
+                    part_m, part_l, part_acc, scale, num_q_heads, num_kv_heads, block_size, max_blocks, n_splits,
+                    reinterpret_cast<const __half*>(k_scale), reinterpret_cast<const __half*>(v_scale));
         } else {
             dim3 g1(num_q_heads * n_splits, num_seqs);
             fa_split_kernel<256><<<g1, 32, 0, stream>>>(
