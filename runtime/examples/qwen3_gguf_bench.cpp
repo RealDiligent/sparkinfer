@@ -62,7 +62,11 @@ int main(int argc, char** argv) {
     // so enable it context-adaptively (>= 8k) by default; short contexts stay bf16 (no regression).
     // SPARKINFER_KV_INT8=1/0 forces it on/off regardless.
     // int8 KV is the Qwen3-MoE head_dim=128 path; the hybrid Qwen3.6 (gated head_dim=256) writes bf16 KV.
-    { const char* e8 = getenv("SPARKINFER_KV_INT8"); kvc.int8_kv = !cfg.hybrid && (e8 ? (e8[0] != '0') : (context_tokens >= 8192)); }
+    // Qwen3.6 hybrid (hd256 full-attn): int8 KV is opt-in via SPARKINFER_HD256_INT8KV=1 (default off);
+    // it uses the hd256 int8 tensor-core flash-decode + int8 partial-RoPE append. Non-hybrid unchanged.
+    { const char* e8 = getenv("SPARKINFER_KV_INT8");
+      const bool hyb8 = getenv("SPARKINFER_HD256_INT8KV") && getenv("SPARKINFER_HD256_INT8KV")[0] == '1';
+      kvc.int8_kv = cfg.hybrid ? hyb8 : (e8 ? (e8[0] != '0') : (context_tokens >= 8192)); }
     const size_t epb=(size_t)16*cfg.n_kv_heads*cfg.head_dim, blocks=(cfg.max_seq+15)/16+8;
     sparkinfer::KVCacheManager kv(kvc, (size_t)cfg.n_layers*2*epb*2*blocks);
     sparkinfer::moe::MoEConfig mc;
