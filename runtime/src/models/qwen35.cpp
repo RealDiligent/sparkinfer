@@ -1109,6 +1109,16 @@ bool Qwen35Model::load_gguf(const std::string& path) {
         } else {
         if (!expect_dims(b + "ffn_gate_inp.weight", {H, c.n_experts})) return false;
         w.router_w = dense(b + "ffn_gate_inp.weight", false);   // native [E,H] for GEMV
+        // The routed-expert tensors are the largest, fully file-controlled weights, and their
+        // per-expert stride (hidden x moe_ffn) is assumed — never re-derived — by
+        // launch_moe_expert_ffn_q4k. Validate their shapes like every sibling tensor above so a
+        // GGUF whose expert_count / expert_feed_forward_length metadata disagrees with the actual
+        // tensor extent is rejected here with a clear error, instead of driving out-of-bounds
+        // device reads in the expert FFN. ggml ne order: gate/up {H, moe_ffn, n_experts},
+        // down {moe_ffn, H, n_experts} (mirrors the ffn_*_shexp checks with the expert axis added).
+        if (!expect_dims(b + "ffn_gate_exps.weight", {H, c.moe_ffn, c.n_experts}) ||
+            !expect_dims(b + "ffn_up_exps.weight",   {H, c.moe_ffn, c.n_experts}) ||
+            !expect_dims(b + "ffn_down_exps.weight", {c.moe_ffn, H, c.n_experts})) return false;
         w.gate_q = dev_quant(b + "ffn_gate_exps.weight", w.gate_qtype);   // kept quantized
         w.up_q   = dev_quant(b + "ffn_up_exps.weight",   w.up_qtype);
         w.down_q = dev_quant(b + "ffn_down_exps.weight", w.down_qtype);
